@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hanzi Workbook Generator</title>
+    <script src="https://unpkg.com/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+    <script src="https://unpkg.com/pinyin-pro@3.18.2/dist/index.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
+
+        /* LEFT PANEL */
+        .left-panel { width: 400px; background: #2c3e50; color: white; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 10; }
+        .left-header { padding: 20px; background: #1a252f; border-bottom: 2px solid #e74c3c; }
+        .left-header h1 { font-size: 24px; margin-bottom: 5px; }
+        .left-header p { font-size: 12px; color: #bdc3c7; }
+        .left-content { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+
+        /* Controls */
+        label { font-size: 14px; font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .slider-input-group { display: flex; gap: 8px; align-items: center; }
+        .slider-input-group input[type="range"] { flex: 1; cursor: pointer; }
+        .slider-input-group input[type="number"] { width: 60px; padding: 6px 8px; border: 2px solid #34495e; border-radius: 5px; background: #ecf0f1; font-weight: bold; text-align: center; color: #2c3e50; }
+        textarea { width: 100%; height: 150px; padding: 12px; border-radius: 5px; font-size: 16px; font-family: "KaiTi", serif; resize: vertical; }
+        select, input[type="color"] { width: 100%; padding: 8px; border-radius: 5px; border: none; font-size: 14px; }
+        input[type="color"] { height: 40px; cursor: pointer; }
+        
+        .control-group { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; }
+        .control-row { display: flex; gap: 10px; }
+        .control-col { flex: 1; }
+        .checkbox-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; color: #ecf0f1; }
+        input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
+
+        /* Buttons */
+        .button-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { flex: 1; background: #e74c3c; color: white; border: none; padding: 14px; font-size: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        button:hover { background: #c0392b; transform: translateY(-1px); }
+        button.secondary { background: #34495e; }
+        button.secondary:hover { background: #2c3e50; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        
+        .status { padding: 12px; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 13px; min-height: 44px; display: flex; align-items: center; }
+        .char-count { font-size: 12px; color: #95a5a6; margin-top: 5px; }
+
+        /* RIGHT PANEL */
+        .right-panel { flex: 1; background: #ecf0f1; overflow: auto; display: flex; justify-content: center; padding: 20px; }
+        .preview-container { background: white; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .empty-state { text-align: center; padding: 60px 20px; color: #95a5a6; }
+
+        /* PAGE */
+        .page { width: 215.9mm; min-height: 279.4mm; position: relative; overflow: hidden; background: white; margin-bottom: 20px; }
+        .char-block { position: absolute; }
+        
+        /* HEADER */
+        .header-row { position: absolute; bottom: 100%; left: 0; width: 100%; height: 4mm; display: flex; align-items: center; font-family: "Times New Roman", serif; line-height: 1; }
+        .pinyin { font-size: 8pt; font-weight: bold; margin-right: 5px; color: #000; position: relative; top: 0.5mm; }
+        .stroke-steps-container { display: flex; gap: 1px; margin-right: 8px; }
+        .stroke-box { width: 3.5mm; height: 3.5mm; }
+        .stroke-box svg { width: 100%; height: 100%; }
+        .definition-box { font-size: 7pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; position: relative; top: 0.5mm; }
+
+        .header-row.first-row-special .pinyin { font-size: 2mm !important; }
+        .header-row.first-row-special .stroke-box { width: 2.4mm !important; height: 2.4mm !important; }
+        .header-row.first-row-special .definition-box { font-size: 2mm !important; }
+        .header-row.first-row-special .stroke-steps-container { gap: 0.5mm !important; }
+
+        /* --- PINYIN GRID CSS --- */
+        .pinyin-grid-row {
+            display: flex;
+            align-items: flex-end; 
+        }
+        .pinyin-cell {
+            text-align: center;
+            font-size: 9pt; 
+            font-family: "Arial", sans-serif;
+            font-weight: normal;
+            color: black;
+            white-space: nowrap;
+            overflow: visible;
+        }
+        .header-row.first-row-special .pinyin-cell { font-size: 10pt; font-weight: bold; }
+
+        .practice-row { display: flex; align-items: center; padding: 0; margin: 0; line-height: 0; }
+        
+        /* THE BOX */
+        .grid-box {
+            position: relative;
+            border: none;
+            width: 28.7527pt;
+            height: 28.7557pt;
+            background: white;
+            box-sizing: border-box;
+            flex-shrink: 0;
+        }
+
+        .grid-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+        .hanzi-target { position: absolute; top: 0; left: 0; z-index: 10; }
+
+        /* Small corner punctuation */
+        .corner-punc {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 10px;
+            font-weight: bold;
+            font-family: "KaiTi", serif;
+            color: black;
+            z-index: 15;
+            line-height: 1;
+        }
+
+        /* --- EXERCISE MODE CSS --- */
+        .exercise-block { 
+            position: relative; 
+            padding-left: 12mm; 
+            page-break-inside: avoid; 
+        }
+        .exercise-number { 
+            position: absolute;
+            left: 10mm;
+            width: 10mm;
+            font-weight: bold; 
+            font-size: 11pt; 
+            font-family: "KaiTi", serif;
+        }
+        .exercise-content { width: 100%; }
+        .exercise-header { white-space: pre-wrap; font-family: "KaiTi", serif; font-size: 11pt; font-weight: bold; margin-bottom: 5px; }
+
+        /* DISABLED STATE CSS */
+        .disabled-control {
+            opacity: 0.4;
+            pointer-events: none;
+            filter: grayscale(100%);
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="left-panel">
+    <div class="left-header">
+        <h1> 📝  Hanzi Generator</h1>
+        <p>Create custom Chinese character worksheets</p>
+    </div>
+    <div class="left-content">
+        <div>
+            <label>Content</label>
+            <textarea id="textInput" placeholder="Enter Chinese characters..."></textarea>
+            <div class="char-count" id="charCount">0 characters</div>
+        </div>
+
+        <div class="control-group">
+            <label>Mode</label>
+            <select id="genMode">
+                <option value="single">Single Character (Repeat)</option>
+                <option value="continuous">Continuous Text (Article)</option>
+                <option value="exercise">Exercise / Workbook</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Display Options</label>
+            <div class="checkbox-row"><input type="checkbox" id="showPinyin" checked> <span>Show Pinyin</span></div>
+            <div class="checkbox-row"><input type="checkbox" id="showStroke" checked> <span>Show Stroke Order</span></div>
+            <div class="checkbox-row"><input type="checkbox" id="showDef" checked> <span>Show Translation</span></div>
+        </div>
+
+        <div class="control-group">
+            <label>Margins & Spacing</label>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; color:#bdc3c7;">Box Size</label>
+                <div class="slider-input-group"><input type="range" id="boxSize" min="6" max="20" step="0.5" value="10"><input type="number" id="boxSizeNum" min="6" max="20" step="0.5" value="10"></div>
+            </div>
+            
+            <div style="margin-bottom:10px;" id="shadowContainer">
+                <label style="font-size:12px; color:#bdc3c7;">Shadow Hanzi</label>
+                <div class="slider-input-group"><input type="range" id="shadowHanzi" min="0" max="15" step="1" value="1"><input type="number" id="shadowHanziNum" min="0" max="15" step="1" value="1"></div>
+            </div>
+            
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; color:#bdc3c7;">Top Margin</label>
+                <div class="slider-input-group"><input type="range" id="marginTop" min="0" max="40" step="0.5" value="5.5"><input type="number" id="marginTopNum" min="0" max="40" step="0.5" value="5.5"></div>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; color:#bdc3c7;">Left Margin</label>
+                <div class="slider-input-group"><input type="range" id="marginLeft" min="0" max="40" step="0.5" value="6"><input type="number" id="marginLeftNum" min="0" max="40" step="0.5" value="6"></div>
+            </div>
+
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; color:#bdc3c7;">Row Spacing</label>
+                <div class="slider-input-group"><input type="range" id="rowSpacing" min="5" max="25" step="0.5" value="14"><input type="number" id="rowSpacingNum" min="5" max="25" step="0.5" value="14"></div>
+            </div>
+            <div>
+                <label style="font-size:12px; color:#bdc3c7;">Column Spacing</label>
+                <div class="slider-input-group"><input type="range" id="colSpacing" min="0" max="5" step="0.5" value="0"><input type="number" id="colSpacingNum" min="0" max="5" step="0.5" value="0"></div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Guides</label>
+            <select id="gridStyle" style="margin-bottom:10px;">
+                <option value="mi">米 (Rice Grid)</option>
+                <option value="cross">Cross (+)</option>
+                <option value="empty">Empty</option>
+            </select>
+            <div class="control-row">
+                <div class="control-col">
+                    <label style="font-size:12px; color:#bdc3c7;">Color</label>
+                    <input type="color" id="gridColor" value="#e74c3c">
+                </div>
+                <div class="control-col">
+                    <label style="font-size:12px; color:#bdc3c7;">Opacity</label>
+                    <input type="range" id="gridOpacity" min="0.1" max="1" step="0.1" value="0.5">
+                </div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="secondary" onclick="clearText()">Clear</button>
+            <button onclick="downloadPDF()">Download PDF</button>
+        </div>
+        <div class="status" id="status"> 👈  Enter characters to see live preview</div>
+    </div>
+</div>
+
+<div class="right-panel">
+    <div class="preview-container" id="preview">
+        <div class="empty-state"><h2>Preview Area</h2><p>Your worksheet will appear here as you type</p></div>
+    </div>
+</div>
+
+<script>
+    const { pinyin } = pinyinPro;
+    const MAX_ROWS = 20;
+    const PUNCTUATION_REGEX = /[，。、！？：；,.\?!:;“ ”" '（ ）( )]/;
+    let debounceTimer;
+
+    // Inputs
+    const textInput = document.getElementById('textInput');
+    const genModeInput = document.getElementById('genMode');
+    const preview = document.getElementById('preview');
+    const charCount = document.getElementById('charCount');
+    
+    const gridStyleInput = document.getElementById('gridStyle');
+    const gridColorInput = document.getElementById('gridColor');
+    const gridOpacityInput = document.getElementById('gridOpacity');
+    const rowSpacingInput = document.getElementById('rowSpacing');
+    const colSpacingInput = document.getElementById('colSpacing');
+    const marginTopInput = document.getElementById('marginTop');
+    const marginLeftInput = document.getElementById('marginLeft');
+    const boxSizeInput = document.getElementById('boxSize');
+    const shadowHanziInput = document.getElementById('shadowHanzi');
+    const shadowContainer = document.getElementById('shadowContainer');
+    
+    const rowSpacingNumInput = document.getElementById('rowSpacingNum');
+    const colSpacingNumInput = document.getElementById('colSpacingNum');
+    const marginTopNumInput = document.getElementById('marginTopNum');
+    const marginLeftNumInput = document.getElementById('marginLeftNum');
+    const boxSizeNumInput = document.getElementById('boxSizeNum');
+    const shadowHanziNumInput = document.getElementById('shadowHanziNum');
+
+    const showPinyinInput = document.getElementById('showPinyin');
+    const showStrokeInput = document.getElementById('showStroke');
+    const showDefInput = document.getElementById('showDef');
+
+    function syncInputs(slider, numberInput) {
+        slider.addEventListener('input', () => { numberInput.value = slider.value; updateAndGenerate(); });
+        numberInput.addEventListener('input', () => {
+            const val = parseFloat(numberInput.value);
+            if (!isNaN(val) && val >= parseFloat(numberInput.min) && val <= parseFloat(numberInput.max)) {
+                slider.value = val;
+            }
+            updateAndGenerate();
+        });
+    }
+
+    syncInputs(rowSpacingInput, rowSpacingNumInput);
+    syncInputs(colSpacingInput, colSpacingNumInput);
+    syncInputs(marginTopInput, marginTopNumInput);
+    syncInputs(marginLeftInput, marginLeftNumInput);
+    syncInputs(boxSizeInput, boxSizeNumInput);
+    syncInputs(shadowHanziInput, shadowHanziNumInput);
+
+    function updateAndGenerate() {
+        updateCharCount();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(generatePreview, 300);
+    }
+
+    // --- HELPER to set values programmatically ---
+    function setVal(slider, numInput, val) {
+        slider.value = val;
+        numInput.value = val;
+    }
+
+    // --- UPDATED UI LOGIC FOR DEFAULTS ---
+    function updateUIForMode() {
+        const mode = genModeInput.value;
+
+        // 1. Shadow Hanzi Logic
+        if (mode === 'single') {
+            shadowContainer.classList.remove('disabled-control');
+            shadowHanziInput.disabled = false;
+            shadowHanziNumInput.disabled = false;
+            if (parseFloat(shadowHanziInput.value) === 0) {
+                setVal(shadowHanziInput, shadowHanziNumInput, 1);
+            }
+        } else {
+            shadowContainer.classList.add('disabled-control');
+            shadowHanziInput.disabled = true;
+            shadowHanziNumInput.disabled = true;
+            setVal(shadowHanziInput, shadowHanziNumInput, 0);
+        }
+
+        // 2. Margins & Spacing Logic
+        if (mode === 'exercise') {
+            // Exercise Defaults
+            setVal(boxSizeInput, boxSizeNumInput, 10);
+            setVal(marginTopInput, marginTopNumInput, 0);
+            setVal(marginLeftInput, marginLeftNumInput, 0);
+            setVal(rowSpacingInput, rowSpacingNumInput, 4);
+            setVal(colSpacingInput, colSpacingNumInput, 0);
+        } else {
+            // Single & Continuous Defaults
+            setVal(boxSizeInput, boxSizeNumInput, 10);
+            setVal(marginTopInput, marginTopNumInput, 5.5);
+            setVal(marginLeftInput, marginLeftNumInput, 6);
+            setVal(rowSpacingInput, rowSpacingNumInput, 14);
+            setVal(colSpacingInput, colSpacingNumInput, 0);
+        }
+
+        updateAndGenerate();
+    }
+
+    genModeInput.addEventListener('change', updateUIForMode);
+
+    [textInput, gridStyleInput, gridColorInput, gridOpacityInput, showPinyinInput, showStrokeInput, showDefInput].forEach(el => {
+        el.addEventListener('input', updateAndGenerate);
+    });
+
+    function updateCharCount() {
+        const text = textInput.value.replace(/[\r\n\s]/g, '');
+        charCount.textContent = `${text.length} characters`;
+    }
+
+    function clearText() {
+        textInput.value = '';
+        updateCharCount();
+        preview.innerHTML = '<div class="empty-state"><h2>Preview Area</h2><p>Your worksheet will appear here as you type</p></div>';
+    }
+
+    async function generatePreview() {
+        const rawText = textInput.value;
+        const text = rawText.replace(/[\r\n\s]/g, '');
+        const mode = genModeInput.value;
+        
+        const gridConfig = { style: gridStyleInput.value, color: gridColorInput.value, opacity: gridOpacityInput.value };
+        const spacing = { row: parseFloat(rowSpacingInput.value), col: parseFloat(colSpacingInput.value) };
+        const margins = { top: parseFloat(marginTopInput.value), left: parseFloat(marginLeftInput.value) };
+        const boxSize = parseFloat(boxSizeInput.value);
+        const shadowCount = parseInt(shadowHanziInput.value);
+        const options = { pinyin: showPinyinInput.checked, stroke: showStrokeInput.checked, def: showDefInput.checked };
+        const numOffset = 0;
+
+        if (!text && mode !== 'exercise') {
+            preview.innerHTML = '<div class="empty-state"><h2>Preview Area</h2><p>Your worksheet will appear here as you type</p></div>';
+            return;
+        }
+
+        preview.innerHTML = '';
+        let currentPageDiv = null;
+        let rowsInCurrentPage = 0;
+
+        if (mode === 'exercise') {
+            currentPageDiv = document.createElement('div');
+            currentPageDiv.className = 'page';
+            currentPageDiv.style.paddingTop = margins.top + "mm";
+            currentPageDiv.style.paddingLeft = margins.left + "mm";
+            preview.appendChild(currentPageDiv);
+
+            const blocks = rawText.split(/(?=^\d+\.)/gm).map(b => b.trim()).filter(b => b);
+            
+            for (let block of blocks) {
+                const match = block.match(/^(\d+\.)\s*([\s\S]*)/);
+                let numberPart = "";
+                let textPart = block;
+                if (match) { numberPart = match[1]; textPart = match[2]; }
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'exercise-block';
+                wrapper.style.marginBottom = spacing.row + "mm";
+                wrapper.style.width = (boxSize * 20 + 15) + "mm"; 
+
+                const isDoubleDigit = numberPart.length > 2;
+                const leftPos = isDoubleDigit ? "8mm" : "10mm";
+
+                const numCol = document.createElement('div');
+                numCol.className = 'exercise-number';
+                numCol.innerText = numberPart;
+                numCol.style.top = (10 + numOffset) + "mm"; 
+                numCol.style.left = leftPos;
+                
+                wrapper.appendChild(numCol);
+
+                const contentCol = document.createElement('div');
+                contentCol.className = 'exercise-content';
+                
+                const header = document.createElement('div');
+                header.className = 'exercise-header';
+                header.innerText = textPart;
+                contentCol.appendChild(header);
+
+                const row = document.createElement('div');
+                row.className = 'practice-row';
+                for(let k=0; k<20; k++) {
+                    createBox(row, null, null, null, gridConfig, boxSize);
+                }
+                contentCol.appendChild(row);
+
+                wrapper.appendChild(contentCol);
+                currentPageDiv.appendChild(wrapper);
+            }
+            return; 
+        }
+
+        let displayItems = [];
+        
+        if (mode === 'single') {
+            for (let char of text) {
+                if (!PUNCTUATION_REGEX.test(char)) {
+                    displayItems.push({ char: char, punc: null });
+                }
+            }
+        } else {
+            for (let char of text) {
+                if (PUNCTUATION_REGEX.test(char)) {
+                    if (displayItems.length > 0) {
+                        displayItems[displayItems.length - 1].punc = char;
+                    } 
+                } else {
+                    displayItems.push({ char: char, punc: null });
+                }
+            }
+        }
+
+        if (mode === 'single') {
+            for (let i = 0; i < displayItems.length; i++) {
+                const item = displayItems[i]; 
+
+                if (currentPageDiv === null || rowsInCurrentPage >= MAX_ROWS) {
+                    currentPageDiv = document.createElement('div');
+                    currentPageDiv.className = 'page';
+                    preview.appendChild(currentPageDiv);
+                    rowsInCurrentPage = 0;
+                }
+
+                const currentTop = margins.top + (rowsInCurrentPage * spacing.row);
+                const block = document.createElement('div');
+                block.className = 'char-block';
+                block.style.left = margins.left + "mm";
+                block.style.top = currentTop + "mm";
+                block.style.height = boxSize + "mm";
+                currentPageDiv.appendChild(block);
+
+                const header = document.createElement('div');
+                header.className = 'header-row';
+                if (rowsInCurrentPage === 0) header.classList.add('first-row-special');
+                
+                if (options.pinyin) {
+                    const p = document.createElement('span');
+                    p.className = 'pinyin'; p.innerText = pinyin(item.char); header.appendChild(p);
+                }
+                
+                let steps = null;
+                if (options.stroke) {
+                    steps = document.createElement('div'); steps.className = 'stroke-steps-container'; header.appendChild(steps);
+                }
+                let defBox = null;
+                if (options.def) {
+                    defBox = document.createElement('div'); defBox.className = 'definition-box'; defBox.innerText = "..."; header.appendChild(defBox);
+                }
+                block.appendChild(header);
+
+                const row = document.createElement('div');
+                row.className = 'practice-row';
+                row.style.gap = spacing.col + "mm";
+                if(spacing.col === 0) row.classList.add('collapsed');
+                block.appendChild(row);
+
+                createBox(row, item.char, item.punc, "#000000", gridConfig, boxSize);
+                for (let t = 0; t < shadowCount; t++) createBox(row, item.char, null, "#d3d3d3", gridConfig, boxSize);
+                const emptyBoxes = 19 - shadowCount;
+                for (let e = 0; e < emptyBoxes; e++) createBox(row, null, null, null, gridConfig, boxSize);
+
+                if (options.stroke && steps) await generateStaticDiagrams(item.char, steps);
+                if (options.def && defBox) fetchDeepDefinition(item.char, defBox);
+
+                rowsInCurrentPage++;
+            }
+
+            if (!currentPageDiv) {
+                currentPageDiv = document.createElement('div'); currentPageDiv.className = 'page'; preview.appendChild(currentPageDiv);
+            }
+            while (rowsInCurrentPage < MAX_ROWS) {
+                const currentTop = margins.top + (rowsInCurrentPage * spacing.row);
+                const block = document.createElement('div');
+                block.className = 'char-block';
+                block.style.left = margins.left + "mm";
+                block.style.top = currentTop + "mm";
+                block.style.height = boxSize + "mm";
+                currentPageDiv.appendChild(block);
+                
+                const row = document.createElement('div'); row.className = 'practice-row';
+                row.style.gap = spacing.col + "mm";
+                if(spacing.col === 0) row.classList.add('collapsed');
+                block.appendChild(row);
+                
+                for (let k = 0; k < 20; k++) createBox(row, null, null, null, gridConfig, boxSize);
+                rowsInCurrentPage++;
+            }
+
+        } else {
+            // CONTINUOUS MODE (Batched by 20)
+            const BOXES_PER_ROW = 20;
+            
+            for (let i = 0; i < displayItems.length; i += BOXES_PER_ROW) {
+                const chunk = displayItems.slice(i, i + BOXES_PER_ROW);
+
+                if (currentPageDiv === null || rowsInCurrentPage >= MAX_ROWS) {
+                    currentPageDiv = document.createElement('div');
+                    currentPageDiv.className = 'page';
+                    preview.appendChild(currentPageDiv);
+                    rowsInCurrentPage = 0;
+                }
+
+                const currentTop = margins.top + (rowsInCurrentPage * spacing.row);
+                const block = document.createElement('div');
+                block.className = 'char-block';
+                block.style.left = margins.left + "mm";
+                block.style.top = currentTop + "mm";
+                block.style.height = boxSize + "mm";
+                currentPageDiv.appendChild(block);
+
+                const header = document.createElement('div');
+                header.className = 'header-row';
+                if (rowsInCurrentPage === 0) header.classList.add('first-row-special');
+                
+                if (options.pinyin) {
+                    const pinyinRow = document.createElement('div');
+                    pinyinRow.className = 'pinyin-grid-row';
+                    pinyinRow.style.gap = spacing.col + "mm";
+
+                    for (let k = 0; k < BOXES_PER_ROW; k++) {
+                        const pCell = document.createElement('div');
+                        pCell.className = 'pinyin-cell';
+                        pCell.style.width = boxSize + "mm"; 
+                        
+                        if (k < chunk.length) {
+                            pCell.innerText = pinyin(chunk[k].char);
+                        }
+                        pinyinRow.appendChild(pCell);
+                    }
+                    header.appendChild(pinyinRow);
+                }
+                block.appendChild(header);
+
+                const row = document.createElement('div');
+                row.className = 'practice-row';
+                row.style.gap = spacing.col + "mm";
+                if(spacing.col === 0) row.classList.add('collapsed');
+                block.appendChild(row);
+
+                for (let k = 0; k < BOXES_PER_ROW; k++) {
+                    if (k < chunk.length) {
+                        createBox(row, chunk[k].char, chunk[k].punc, "#000000", gridConfig, boxSize);
+                    } else {
+                        createBox(row, null, null, null, gridConfig, boxSize);
+                    }
+                }
+                rowsInCurrentPage++;
+            }
+
+            if (!currentPageDiv) {
+                currentPageDiv = document.createElement('div'); currentPageDiv.className = 'page'; preview.appendChild(currentPageDiv);
+            }
+            while (rowsInCurrentPage < MAX_ROWS) {
+                const currentTop = margins.top + (rowsInCurrentPage * spacing.row);
+                const block = document.createElement('div');
+                block.className = 'char-block';
+                block.style.left = margins.left + "mm";
+                block.style.top = currentTop + "mm";
+                block.style.height = boxSize + "mm";
+                currentPageDiv.appendChild(block);
+                
+                const row = document.createElement('div'); row.className = 'practice-row';
+                row.style.gap = spacing.col + "mm";
+                if(spacing.col === 0) row.classList.add('collapsed');
+                block.appendChild(row);
+                
+                for (let k = 0; k < 20; k++) createBox(row, null, null, null, gridConfig, boxSize);
+                rowsInCurrentPage++;
+            }
+        }
+    }
+
+    function createBox(row, char, punc, strokeColor, config, boxSize) {
+        const box = document.createElement('div');
+        box.className = 'grid-box';
+        
+        const BORDER_LINES = `
+            <line x1=".2" y1="28.55" x2="28.547" y2="28.55" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .4px;"/>
+            <line x1=".2" y1=".2" x2="28.547" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .4px;"/>
+            <line x1=".2" y1="28.55" x2=".2" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .4px;"/>
+            <line x1="28.547" y1="28.55" x2="28.547" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .4px;"/>
+        `;
+        
+        const MI_INTERNAL = `
+            <line x1=".2" y1="14.37" x2=".9079" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="1.643" y1="14.37" x2="8.7155" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .943 .943 .943 .943 .943 .943; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="9.187" y1="14.37" x2="27.5755" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .943 .943 .943 .943 .943 .943; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.8391" y1="14.37" x2="28.547" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="28.5466" x2="14.373" y2="27.8379" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="27.107" x2="14.373" y2="20.0337" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .9431 .9431 .9431 .9431 .9431 .9431; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="19.5621" x2="14.373" y2="1.1715" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .9431 .9431 .9431 .9431 .9431 .9431; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1=".908" x2="14.373" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1=".2" y1="28.55" x2=".7669" y2="27.983" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="1.2623" y1="27.4877" x2="6.5776" y2="22.1717" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="6.932" y1="21.8173" x2="27.8391" y2=".908" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.9801" y1=".767" x2="28.547" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="28.547" y1="28.55" x2="27.9801" y2="27.983" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.4847" y1="27.4877" x2="22.1694" y2="22.1717" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="21.815" y1="21.8173" x2=".9079" y2=".908" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1=".8374" y1=".8375" x2=".2705" y2=".2705" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+        `;
+        const CROSS_INTERNAL = `
+            <line x1=".2" y1="14.37" x2=".9079" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="1.643" y1="14.37" x2="8.7155" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .943 .943 .943 .943 .943 .943; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="9.187" y1="14.37" x2="27.5755" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .943 .943 .943 .943 .943 .943; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.8391" y1="14.37" x2="28.547" y2="14.37" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="28.5466" x2="14.373" y2="27.8379" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="27.107" x2="14.373" y2="20.0337" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .9431 .9431 .9431 .9431 .9431 .9431; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1="19.5621" x2="14.373" y2="1.1715" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 .9431 .9431 .9431 .9431 .9431 .9431; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="14.373" y1=".908" x2="14.373" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1=".2" y1="28.55" x2=".7669" y2="27.983" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="1.2623" y1="27.4877" x2="6.5776" y2="22.1717" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="6.932" y1="21.8173" x2="27.8391" y2=".908" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.9801" y1=".767" x2="28.547" y2=".2" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="28.547" y1="28.55" x2="27.9801" y2="27.983" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="27.4847" y1="27.4877" x2="22.1694" y2="22.1717" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1="21.815" y1="21.8173" x2=".9079" y2=".908" style="fill: none; stroke: ${config.color}; stroke-dasharray: 0 0 0 0 0 0 1.0023 1.0023 1.0023 1.0023 1.0023 1.0023; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+            <line x1=".8374" y1=".8375" x2=".2705" y2=".2705" style="fill: none; stroke: ${config.color}; stroke-miterlimit: 10; stroke-width: .1333px;"/>
+        `;
+
+        let internalContent = "";
+        if (config.style === 'mi') internalContent = MI_INTERNAL;
+        else if (config.style === 'cross') internalContent = CROSS_INTERNAL;
+
+        box.innerHTML = `
+        <svg class="grid-bg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28.747 28.75" style="width:100%; height:100%; display:block; overflow:visible;" preserveAspectRatio="none">
+            ${BORDER_LINES}
+            <g style="opacity: ${config.opacity};">${internalContent}</g>
+        </svg>`;
+
+        if (punc) {
+            const pSpan = document.createElement('span');
+            pSpan.className = 'corner-punc';
+            pSpan.innerText = punc;
+            
+            if (punc === '，' || punc === ',') {
+                pSpan.style.right = "-6px";
+                pSpan.style.bottom = "2px";
+            } else if (punc === '。' || punc === '.') {
+                pSpan.style.right = "-4.5px";
+                pSpan.style.bottom = "2px";
+            } else {
+                pSpan.style.right = "2px";
+                pSpan.style.bottom = "2px";
+            }
+
+            box.appendChild(pSpan);
+        }
+
+        const targetDiv = document.createElement('div');
+        const id = 'box-' + Math.random().toString(36).substr(2, 9);
+        targetDiv.id = id; targetDiv.className = 'hanzi-target';
+        box.appendChild(targetDiv); row.appendChild(box);
+
+        if (char) {
+            HanziWriter.create(id, char, { width: 38.56, height: 38.57, padding: 0, strokeColor: strokeColor, showOutline: false, showCharacter: true });
+        }
+    }
+
+    async function fetchDeepDefinition(char, element) {
+        try {
+            const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&dt=bd&q=" + encodeURI(char);
+            const response = await fetch(url);
+            const data = await response.json();
+            let meanings = [];
+            if (data[1]) data[1].forEach(p => { if (p[1]) meanings.push(p[1].slice(0, 3).join(", ")); });
+            if (meanings.length === 0 && data[0] && data[0][0]) meanings.push(data[0][0][0]);
+            element.innerText = meanings.join("; ");
+        } catch (err) { element.innerText = ""; }
+    }
+
+    async function generateStaticDiagrams(char, container) {
+        try {
+            let charData = await HanziWriter.loadCharacterData(char);
+            let strokes = charData.strokes;
+            for (let i = 0; i < strokes.length; i++) {
+                let box = document.createElement('div'); box.className = 'stroke-box';
+                let svg = '<svg viewBox="0 0 1024 1024"><g transform="scale(1, -1) translate(0, -900)">';
+                for (let j = 0; j < strokes.length; j++) { if (j > i) svg += '<path d="' + strokes[j] + '" fill="#e6e6e6" />'; }
+                for (let j = 0; j < strokes.length; j++) { if (j <= i) svg += '<path d="' + strokes[j] + '" fill="#000000" />'; }
+                svg += '</g></svg>';
+                box.innerHTML = svg; container.appendChild(box);
+            }
+        } catch (err) { }
+    }
+
+    async function downloadPDF() {
+        const text = textInput.value;
+        const btn = event.target;
+        const status = document.getElementById('status');
+        if (!text) { alert("Please enter some text!"); return; }
+
+        const gridConfig = { style: gridStyleInput.value, color: gridColorInput.value, opacity: gridOpacityInput.value };
+        const spacing = { row: parseFloat(rowSpacingInput.value), col: parseFloat(colSpacingInput.value) };
+        const margins = { top: parseFloat(marginTopInput.value), left: parseFloat(marginLeftInput.value) };
+        const boxSize = parseFloat(boxSizeInput.value);
+        const shadowCount = parseInt(shadowHanziInput.value);
+        const displayOptions = { pinyin: showPinyinInput.checked, stroke: showStrokeInput.checked, def: showDefInput.checked };
+        const numOffset = 0;
+
+        btn.disabled = true; btn.innerText = "Generating...";
+        status.innerHTML = " ⏳  Generating PDF... (10-30 seconds)";
+
+        try {
+            const response = await fetch('/generate-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    genMode: genModeInput.value,
+                    text, gridConfig, spacing, margins, boxSize, shadowCount, displayOptions,
+                    numberOffset: numOffset
+                })
+            });
+            if (!response.ok) throw new Error("Generation failed");
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = "My_Hanzi_Workbook.pdf";
+            document.body.appendChild(a); a.click(); a.remove();
+            status.innerHTML = " ✅  PDF downloaded successfully!";
+        } catch (err) {
+            console.error(err); status.innerHTML = " ❌  Error generating PDF";
+        }
+        btn.disabled = false; btn.innerText = "Download PDF";
+    }
+</script>
+</body>
+</html>
